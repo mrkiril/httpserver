@@ -1,0 +1,14 @@
+LICENSE.txt
+MANIFEST.in
+README.txt
+httpserver.py
+setup.py
+httpserver.egg-info/PKG-INFO
+httpserver.egg-info/SOURCES.txt
+httpserver.egg-info/dependency_links.txt
+httpserver.egg-info/top_level.txt
+pages/404.html
+pages/418.html
+tests/__init__.py
+tests/httpclient_pep8.py
+tests/test_serv.py
