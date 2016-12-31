@@ -413,7 +413,14 @@ class BaseServer(object):
 
             except socket.timeout as e:
                 self.logger.info("Time Out of Socket")
-                raise HttpErrors(418)
+                #raise HttpErrors(418)
+                err = "<h1>Time Out of Socket</h1>"
+                self.client_sock.send(err.encode())
+                self.client_sock.close()
+            
+            except socket.error as e:
+                self.logger.info("Error Socket")
+                #raise HttpErrors(418)
                 self.client_sock.close()
 
             except HttpErrors as e:
