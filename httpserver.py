@@ -29,11 +29,12 @@ class HttpErrors(Exception):
         r.content_type = 'text/html'
         r.content = content
         if self.err_number == 404:
-            with open(os.path.join(os.getcwd(), "pages", "404.html")) as fp:
+            #print(__file__)
+            with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), "pages", "404.html")) as fp:
                 r.content = fp.read()
 
         if self.err_number == 418:
-            with open(os.path.join(os.getcwd(), "pages", "418.html")) as fp:
+            with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), "pages", "418.html")) as fp:
                 r.content = fp.read()
 
         return r
@@ -412,7 +413,7 @@ class BaseServer(object):
 
             except socket.timeout as e:
                 self.logger.info("Time Out of Socket")
-                self.client_sock.send(b"<h1>" + str(e).encode() + b"</h1>")
+                raise HttpErrors(418)
                 self.client_sock.close()
 
             except HttpErrors as e:
