@@ -29,12 +29,12 @@ class HttpErrors(Exception):
         r.content_type = 'text/html'
         r.content = content
         if self.err_number == 404:
-            with open( os.path.join("pages", "404.html")) as fp:
-                r.content= fp.read()
+            with open(os.path.join(os.getcwd(), "pages", "404.html")) as fp:
+                r.content = fp.read()
 
         if self.err_number == 418:
-            with open(os.path.join("pages", "418.html")) as fp:
-                r.content= fp.read()
+            with open(os.path.join(os.getcwd(), "pages", "418.html")) as fp:
+                r.content = fp.read()
 
         return r
 
@@ -183,7 +183,7 @@ class BaseServer(object):
         self.client_addr = None
         self.table = []
         self.sock_list = []
-        self.logger = logging.getLogger(__name__)        
+        self.logger = logging.getLogger(__name__)
         self.COOKIE = {"key": "value"}
         self.file_path = os.path.abspath(os.path.dirname(__file__))
         # - - - - - - - -
@@ -355,11 +355,11 @@ class BaseServer(object):
         return http_req
 
     def pathfinder(self, link):
-        s_path = link        
+        s_path = link
         if "?" in link:
             s_path = link.split("?")[0]
-        
-        re_path = re.match("[^/]*(.*)", s_path, re.DOTALL)        
+
+        re_path = re.match("[^/]*(.*)", s_path, re.DOTALL)
         return re_path.group(1)
 
     def serve_multi(self):
@@ -369,14 +369,14 @@ class BaseServer(object):
             self.client_sock, self.client_addr = self.serv_sock.accept()
 
             try:
-                http_req = self.take_req()                
+                http_req = self.take_req()
                 self.serv_log(http_req.text)
-                #self.logger.info("Request from: " + str(http_req.path))                                
+                #self.logger.info("Request from: " + str(http_req.path))
                 s_path = self.pathfinder(http_req.path)
-                #s_path = http_req.path                
+                #s_path = http_req.path
                 #self.logger.info("s_path: " + str(s_path))
 
-                for it in range(len(self.table)):                    
+                for it in range(len(self.table)):
                     link_pat = re.search(self.table[it]["link"], s_path)
 
                     if link_pat is None and it == (len(self.table) - 1):
@@ -438,7 +438,7 @@ class BaseServer(object):
                 self.client_sock.send(response.encode())
                 self.client_sock.close()
 
-            except Exception as e:                
+            except Exception as e:
                 #_=input()
                 self.logger.exception("Global WTF Exception", e)
 
