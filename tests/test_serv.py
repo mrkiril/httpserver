@@ -14,7 +14,7 @@ import math
 import hashlib
 #sys.path.append(os.path.abspath(os.path.join(os.path.abspath(os.path.dirname(__file__)), os.pardir)))
 
-from httpclient_pep8 import HttpClient
+from httpclient import HttpClient
 import unittest
 
 
