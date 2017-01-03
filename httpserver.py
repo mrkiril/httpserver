@@ -191,6 +191,9 @@ class BaseServer(object):
 
         self.configure()
 
+    def __exit__(self):
+        self.serv_sock.close()    
+
     def add_route(self, link, function, method="GET"):
         # self.table.append({"link": link,"funk": function, "method": method})
         self.table.append({"link": link, "funk": function, "method": method})
@@ -209,13 +212,14 @@ class BaseServer(object):
         return headers
 
     def recv_data(self, byte):
-        self.client_sock.settimeout(20)
+        self.client_sock.settimeout(10)        
         request = self.client_sock.recv(byte)
+        #self.logger.info( request )
         self.client_sock.settimeout(None)
         return request
 
     def send_data(self, byte):
-        self.client_sock.settimeout(20)
+        self.client_sock.settimeout(10)
         self.client_sock.send(byte)
         self.client_sock.settimeout(None)
 
@@ -269,8 +273,9 @@ class BaseServer(object):
         meth = ["GET", "POST", "HEAD", "DELETE", "PUT"]
         req = b""
         while True:
-            req += self.recv_data(20)
-            if CRLF in req:
+            data = self.recv_data(20)
+            req += data
+            if CRLF in req or data == b"":
                 fline_pat = re.match(b"(\w+) ([^ ]+) ([^ ]+)\r\n", req)
                 break
 
@@ -456,9 +461,18 @@ class BaseServer(object):
         self.serv_sock.bind((self.ip, self.port))
         self.serv_sock.listen(10)
 
-        pool = multiprocessing.Pool(
-            processes=2,
-            initializer=self.serve_multi)
+        #pool = multiprocessing.Pool(
+        #    processes=2,
+        #    initializer=self.serve_multi)
 
-        pool.close()  # no more tasks
-        pool.join()  # wrap up current tasks
+        #pool.close()  # no more tasks
+        #pool.join()  # wrap up current tasks
+        allProcesses = []
+        for i in range(2):
+            p = multiprocessing.Process(target=self.serve_multi, daemon=False)
+            allProcesses.append(p)
+            p.start()
+
+        for p in allProcesses:
+            p.join()
+
