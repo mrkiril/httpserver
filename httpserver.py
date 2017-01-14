@@ -373,15 +373,13 @@ class BaseServer(object):
 
             self.logger.info('Wait for conection ...')
             self.client_sock, self.client_addr = self.serv_sock.accept()
-
+            #self.logger.info('LOOL')
+            #self.client_sock.setblocking(False)
             try:
                 http_req = self.take_req()
-                self.serv_log(http_req.text)
-                #self.logger.info("Request from: " + str(http_req.path))
+                self.serv_log(http_req.text)                
                 s_path = self.pathfinder(http_req.path)
-                #s_path = http_req.path
-                #self.logger.info("s_path: " + str(s_path))
-
+                
                 for it in range(len(self.table)):
                     link_pat = re.search(self.table[it]["link"], s_path)
 
@@ -437,12 +435,13 @@ class BaseServer(object):
                 self.logger.info("Http error: " + str(e.err_number))
                 self.client_sock.send(err.encode())
                 self.client_sock.close()
-
+            '''
             except KeyError as e:
                 self.logger.info("Key Error mode")
                 content = ("<h1>Error 11. Wrong cookies key.\r\n"
                            "Try another cookies key or put cookies"
                            " with this key</h1>")
+                content += "\r\n<h1>"+str(e)+"</h1>"
                 http_resp = HttpResponse(status_code=500)
                 http_resp.content_type = 'text/html'
                 http_resp.content = content
@@ -454,19 +453,15 @@ class BaseServer(object):
             except Exception as e:
                 #_=input()
                 self.logger.exception("Global WTF Exception", e)
-
+            '''
     def serve_forever(self):
         self.logger = logging.getLogger(__name__)
         self.serv_sock = socket.socket()
         self.serv_sock.bind((self.ip, self.port))
-        self.serv_sock.listen(10)
+        self.serv_sock.listen(1)
+        
+        self.serve_multi()
 
-        #pool = multiprocessing.Pool(
-        #    processes=2,
-        #    initializer=self.serve_multi)
-
-        #pool.close()  # no more tasks
-        #pool.join()  # wrap up current tasks
         allProcesses = []
         for i in range(2):
             p = multiprocessing.Process(target=self.serve_multi, daemon=False)
