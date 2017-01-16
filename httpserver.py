@@ -5,8 +5,8 @@ import re
 from email.utils import formatdate
 import logging
 import multiprocessing
-
-
+from multiprocessing import Queue
+from multiprocessing import Manager
 class HttpErrors(Exception):
     """Class HttpErrors
     Need to construct answer of invalid request and mistakes server.
@@ -368,13 +368,24 @@ class BaseServer(object):
         re_path = re.match("[^/]*(.*)", s_path, re.DOTALL)
         return re_path.group(1)
 
+    def process_controller(self, pid, status):
+        self.pid_dick_status[pid] = status
+        #print( os.getpid())
+        #print( self.pid_dick_status )
+        if len(self.pid_dick_status) - list(self.pid_dick_status.values()).count("on") < 2:
+            p = multiprocessing.Process(target=self.serve_multi, daemon=False)
+            self.allProcesses.append(p)
+            p.start()
+            #p.join()
+
     def serve_multi(self):
         while True:
-
-            self.logger.info('Wait for conection ...')
+            self.process_controller( pid=str(os.getpid()), status="off" )
+            self.logger.info('Wait for conection ... '+str(os.getpid()))
+            print( self.pid_dick_status)
             self.client_sock, self.client_addr = self.serv_sock.accept()
-            #self.logger.info('LOOL')
-            #self.client_sock.setblocking(False)
+            self.process_controller( pid=str(os.getpid()), status="on" )
+            #print( self.pid_dick_status)
             try:
                 http_req = self.take_req()
                 self.serv_log(http_req.text)                
@@ -435,6 +446,9 @@ class BaseServer(object):
                 self.logger.info("Http error: " + str(e.err_number))
                 self.client_sock.send(err.encode())
                 self.client_sock.close()
+            
+            else:
+                pass
             '''
             except KeyError as e:
                 self.logger.info("Key Error mode")
@@ -454,20 +468,25 @@ class BaseServer(object):
                 #_=input()
                 self.logger.exception("Global WTF Exception", e)
             '''
+    
     def serve_forever(self):
         self.logger = logging.getLogger(__name__)
         self.serv_sock = socket.socket()
         self.serv_sock.bind((self.ip, self.port))
-        self.serv_sock.listen(1)
-        
-        self.serve_multi()
+        self.serv_sock.listen(1000)
+        self.numbers_process = 2
+        self.numbers_users = 0
+        manager = Manager()
+        self.pid_dick_status = manager.dict()
+        #self.pid_dick_status = {}
+        #self.serve_multi()
 
-        allProcesses = []
-        for i in range(2):
+        self.allProcesses = []
+        for i in range(1):
             p = multiprocessing.Process(target=self.serve_multi, daemon=False)
-            allProcesses.append(p)
+            self.allProcesses.append(p)
             p.start()
 
-        for p in allProcesses:
+        for p in self.allProcesses:
             p.join()
 
