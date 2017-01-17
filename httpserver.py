@@ -7,6 +7,8 @@ import logging
 import multiprocessing
 from multiprocessing import Queue
 from multiprocessing import Manager
+from time import sleep
+
 class HttpErrors(Exception):
     """Class HttpErrors
     Need to construct answer of invalid request and mistakes server.
@@ -201,6 +203,7 @@ class BaseServer(object):
     def find_headers(self,  all_headers):
         headers = {}
         # get out first rows
+        #print(all_headers)
         all_headers = all_headers[int(re.search(".+?\r\n",
                                                 all_headers).span()[1]):]
         # Parsing headers
@@ -364,34 +367,29 @@ class BaseServer(object):
         s_path = link
         if "?" in link:
             s_path = link.split("?")[0]
+ 
+        re_path = re.match("(https?://)?[^/]*(.*)", s_path, re.DOTALL)        
+        return re_path.group(2)
 
-        re_path = re.match("[^/]*(.*)", s_path, re.DOTALL)
-        return re_path.group(1)
-
-    def process_controller(self, pid, status):
-        self.pid_dick_status[pid] = status
-        #print( os.getpid())
-        #print( self.pid_dick_status )
+    def master_process(self):
+        #print(len(self.pid_dick_status) - list(self.pid_dick_status.values()).count("on"))
+        sleep(0.01)
         if len(self.pid_dick_status) - list(self.pid_dick_status.values()).count("on") < 2:
             p = multiprocessing.Process(target=self.serve_multi, daemon=False)
             self.allProcesses.append(p)
             p.start()
-            #p.join()
 
     def serve_multi(self):
         while True:
-            self.process_controller( pid=str(os.getpid()), status="off" )
+            self.pid_dick_status[str(os.getpid())] = "off"
             self.logger.info('Wait for conection ... '+str(os.getpid()))
-            print( self.pid_dick_status)
             self.client_sock, self.client_addr = self.serv_sock.accept()
-            self.process_controller( pid=str(os.getpid()), status="on" )
-            #print( self.pid_dick_status)
+            self.pid_dick_status[str(os.getpid())] = "on"
             try:
                 http_req = self.take_req()
-                self.serv_log(http_req.text)                
+                self.serv_log(http_req.text)                    
                 s_path = self.pathfinder(http_req.path)
-                
-                for it in range(len(self.table)):
+                for it in range(len(self.table)):                    
                     link_pat = re.search(self.table[it]["link"], s_path)
 
                     if link_pat is None and it == (len(self.table) - 1):
@@ -474,19 +472,17 @@ class BaseServer(object):
         self.serv_sock = socket.socket()
         self.serv_sock.bind((self.ip, self.port))
         self.serv_sock.listen(1000)
-        self.numbers_process = 2
-        self.numbers_users = 0
-        manager = Manager()
-        self.pid_dick_status = manager.dict()
-        #self.pid_dick_status = {}
-        #self.serve_multi()
 
+        manager_d = Manager()        
+        self.pid_dick_status = manager_d.dict()
         self.allProcesses = []
-        for i in range(1):
+        
+        for i in range(2):
             p = multiprocessing.Process(target=self.serve_multi, daemon=False)
             self.allProcesses.append(p)
             p.start()
 
-        for p in self.allProcesses:
-            p.join()
-
+        # cheak the data process
+        while True:
+            self.master_process()
+        
