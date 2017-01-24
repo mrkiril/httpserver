@@ -7,7 +7,10 @@ import logging
 import multiprocessing
 from multiprocessing import Queue
 from multiprocessing import Manager
+from multiprocessing import Pipe
 from time import sleep
+import signal
+
 
 class HttpErrors(Exception):
     """Class HttpErrors
@@ -31,7 +34,6 @@ class HttpErrors(Exception):
         r.content_type = 'text/html'
         r.content = content
         if self.err_number == 404:
-            #print(__file__)
             with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), "pages", "404.html")) as fp:
                 r.content = fp.read()
 
@@ -191,10 +193,21 @@ class BaseServer(object):
         self.file_path = os.path.abspath(os.path.dirname(__file__))
         # - - - - - - - -
 
+        self.ISTERM = False
+        self.isterm_status = False
         self.configure()
 
     def __exit__(self):
-        self.serv_sock.close()    
+        self.serv_sock.close()
+        for proc in self.allProcesses.keys():
+            self.logger.info(str(proc))
+            os.kill(proc, signal.SIGKILL)
+
+    def setting(self):
+        pass
+
+    def configure(self):
+        pass
 
     def add_route(self, link, function, method="GET"):
         # self.table.append({"link": link,"funk": function, "method": method})
@@ -203,7 +216,6 @@ class BaseServer(object):
     def find_headers(self,  all_headers):
         headers = {}
         # get out first rows
-        #print(all_headers)
         all_headers = all_headers[int(re.search(".+?\r\n",
                                                 all_headers).span()[1]):]
         # Parsing headers
@@ -215,7 +227,7 @@ class BaseServer(object):
         return headers
 
     def recv_data(self, byte):
-        self.client_sock.settimeout(10)        
+        self.client_sock.settimeout(10)
         request = self.client_sock.recv(byte)
         #self.logger.info( request )
         self.client_sock.settimeout(None)
@@ -367,29 +379,78 @@ class BaseServer(object):
         s_path = link
         if "?" in link:
             s_path = link.split("?")[0]
- 
-        re_path = re.match("(https?://)?[^/]*(.*)", s_path, re.DOTALL)        
+
+        re_path = re.match("(https?://)?[^/]*(.*)", s_path, re.DOTALL)
         return re_path.group(2)
 
-    def master_process(self):
-        #print(len(self.pid_dick_status) - list(self.pid_dick_status.values()).count("on"))
-        sleep(0.01)
-        if len(self.pid_dick_status) - list(self.pid_dick_status.values()).count("on") < 2:
-            p = multiprocessing.Process(target=self.serve_multi, daemon=False)
-            self.allProcesses.append(p)
-            p.start()
+    def proc_terminate(self):
+        keys = list(self.allProcesses.keys())[:]
+        for pid in keys:
+            if pid == self.master_pid:
+                continue
+            # close process
+            self.logger.info("Just and kill >> " + str(pid))
+            if self.allProcesses[pid].is_alive() == True:
+                # close pid_dick_status means Pipe()
+                self.pid_dick_status[pid][1].close()
+                self.allProcesses[pid].terminate()
+            # clear all process and Pipes
+            self.pid_dick_status.pop(pid)
+            self.allProcesses.pop(pid)
 
-    def serve_multi(self):
-        while True:
-            self.pid_dick_status[str(os.getpid())] = "off"
-            self.logger.info('Wait for conection ... '+str(os.getpid()))
-            self.client_sock, self.client_addr = self.serv_sock.accept()
-            self.pid_dick_status[str(os.getpid())] = "on"
+    def create_process(self):
+        parent_conn, child_conn = Pipe()
+        p = multiprocessing.Process(
+            target=self.serve_multi, daemon=True, name='more_', args=(child_conn,))
+        p.start()
+        self.allProcesses[p.pid] = p
+        self.pid_dick_status[p.pid] = ["off", parent_conn]
+
+    def master_process(self):
+        try:
+            sleep(0.01)
+            if self.ISTERM == True:
+                command = "y"
+                raise KeyboardInterrupt('outside INTERUPT signal')
+
+            for k, v in self.pid_dick_status.items():
+                if v[1].poll():
+                    try:
+                        v[0] = v[1].recv()
+                    except EOFError:
+                        continue
+
+            arr = [v[0] for k, v in self.pid_dick_status.items()]
+            if arr.count("off") < 2:
+                self.create_process()
+
+        except KeyboardInterrupt as e:
             try:
+                command = input("Are you sure that close the server ? y/n\r\n")
+            except EOFError as e:
+                self.logger.info("forced output")
+                command = "y"
+            if command in ["Y", "y", "Yes", "yes"]:
+                self.serv_sock.close()
+                self.proc_terminate()
+                return "exit"
+
+            else:
+                self.proc_terminate()
+                self.ISTERM = False
+
+    def serve_multi(self, child_conn):
+        self.child_conn = child_conn
+        while True:
+            child_conn.send("off")
+            self.logger.info('Wait for conection ... ' + str(os.getpid()))
+            try:
+                self.client_sock, self.client_addr = self.serv_sock.accept()
+                child_conn.send("on")
                 http_req = self.take_req()
-                self.serv_log(http_req.text)                    
+                self.serv_log(http_req.text)
                 s_path = self.pathfinder(http_req.path)
-                for it in range(len(self.table)):                    
+                for it in range(len(self.table)):
                     link_pat = re.search(self.table[it]["link"], s_path)
 
                     if link_pat is None and it == (len(self.table) - 1):
@@ -423,13 +484,16 @@ class BaseServer(object):
                         self.logger.info("End")
                         break
 
+            except KeyboardInterrupt as e:
+                break
+
             except socket.timeout as e:
                 self.logger.info("Time Out of Socket")
                 #raise HttpErrors(418)
                 err = "<h1>Time Out of Socket</h1>"
                 self.client_sock.send(err.encode())
                 self.client_sock.close()
-            
+
             except socket.error as e:
                 self.logger.info("Error Socket")
                 #raise HttpErrors(418)
@@ -444,45 +508,31 @@ class BaseServer(object):
                 self.logger.info("Http error: " + str(e.err_number))
                 self.client_sock.send(err.encode())
                 self.client_sock.close()
-            
-            else:
-                pass
-            '''
-            except KeyError as e:
-                self.logger.info("Key Error mode")
-                content = ("<h1>Error 11. Wrong cookies key.\r\n"
-                           "Try another cookies key or put cookies"
-                           " with this key</h1>")
-                content += "\r\n<h1>"+str(e)+"</h1>"
-                http_resp = HttpResponse(status_code=500)
-                http_resp.content_type = 'text/html'
-                http_resp.content = content
 
-                response = http_resp.resp_constr()
-                self.client_sock.send(response.encode())
-                self.client_sock.close()
-
-            except Exception as e:
-                #_=input()
-                self.logger.exception("Global WTF Exception", e)
-            '''
-    
     def serve_forever(self):
         self.logger = logging.getLogger(__name__)
         self.serv_sock = socket.socket()
         self.serv_sock.bind((self.ip, self.port))
         self.serv_sock.listen(1000)
 
-        manager_d = Manager()        
-        self.pid_dick_status = manager_d.dict()
-        self.allProcesses = []
-        
+        self.manager_d = Manager()
+        self.pid_dick_status = {}
+        self.allProcesses = {}
+        self.allProcesses[os.getpid()] = "master"
+        self.master_pid = os.getpid()
+        signal.signal(signal.SIGINT, self.signal_inter_master_handler)
         for i in range(2):
-            p = multiprocessing.Process(target=self.serve_multi, daemon=False)
-            self.allProcesses.append(p)
-            p.start()
+            self.create_process()
 
-        # cheak the data process
         while True:
-            self.master_process()
-        
+            is_exit = self.master_process()
+            if is_exit == "exit":
+                break
+            else:
+                continue
+
+    def signal_inter_master_handler(self, signal, frame):
+        self.ISTERM = True
+
+    def signal_term_child_handler(self, signal, frame):
+        self.child_conn.close()
