@@ -191,8 +191,7 @@ class BaseServer(object):
         self.logger = logging.getLogger(__name__)
         self.COOKIE = {"key": "value"}
         self.file_path = os.path.abspath(os.path.dirname(__file__))
-        # - - - - - - - -
-
+        
         self.ISTERM = False
         self.isterm_status = False
         self.configure()
