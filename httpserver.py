@@ -13,6 +13,7 @@ import signal
 
 
 class HttpErrors(Exception):
+
     """Class HttpErrors
     Need to construct answer of invalid request and mistakes server.
     Method "getter" construct answer to the request
@@ -34,17 +35,22 @@ class HttpErrors(Exception):
         r.content_type = 'text/html'
         r.content = content
         if self.err_number == 404:
-            with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), "pages", "404.html")) as fp:
+            with open(os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                                   "pages",
+                                   "404.html")) as fp:
                 r.content = fp.read()
 
         if self.err_number == 418:
-            with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), "pages", "418.html")) as fp:
+            with open(os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                                   "pages",
+                                   "418.html")) as fp:
                 r.content = fp.read()
 
         return r
 
 
 class HtCode(object):
+
     """
     Http Code class
 
@@ -78,6 +84,7 @@ class ZeroAnswer(Exception):
 
 
 class HttpRequest(object):
+
     """ Class HttpRequest of this project.
         This class only construc structure of
         request 
@@ -102,6 +109,7 @@ class HttpRequest(object):
 
 
 class HttpResponse(object):
+
     """ Class HttpResponse of this server.
         It contain resp_constr methods.
         Which can make response
@@ -158,8 +166,9 @@ class HttpResponse(object):
                     str(self.content_type) + "; charset=utf-8" + CRLF
             if self.set_cookie != {}:
                 for k, v in self.set_cookies.items():
-                    q += "Set-Cookie: {0}={1}; expires=Fri, 31 Dec 2019 23:59:59 GMT; path=/\r\n".format(
-                        k, v, dt)
+                    q += ("Set-Cookie: {0}={1}; expires=Fri,"
+                          " 31 Dec 2019 23:59:59 GMT; path=/\r\n".format(
+                              k, v, dt))
             if self.status_code in [301, 302]:
                 q += "Location: 127.0.0.1:8080" + self.location + CRLF
 
@@ -172,6 +181,7 @@ class HttpResponse(object):
 
 
 class BaseServer(object):
+
     """ Main class of this server.
         It contain serve_forever methods.
         Which can take request to the socket and give
@@ -191,7 +201,7 @@ class BaseServer(object):
         self.logger = logging.getLogger(__name__)
         self.COOKIE = {"key": "value"}
         self.file_path = os.path.abspath(os.path.dirname(__file__))
-        
+
         self.ISTERM = False
         self.isterm_status = False
         self.configure()
@@ -400,7 +410,10 @@ class BaseServer(object):
     def create_process(self):
         parent_conn, child_conn = Pipe()
         p = multiprocessing.Process(
-            target=self.serve_multi, daemon=True, name='more_', args=(child_conn,))
+            target=self.serve_multi,
+            daemon=True,
+            name='more_',
+            args=(child_conn,))
         p.start()
         self.allProcesses[p.pid] = p
         self.pid_dick_status[p.pid] = ["off", parent_conn]
