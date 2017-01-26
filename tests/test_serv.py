@@ -1,24 +1,8 @@
-import sys
-import datetime
-import time
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import re
-import socket
-import base64
-import json
-import mimetypes
 import os.path
-import logging
-import random
-import string
-import math
-import hashlib
-from httpclient import HttpClient
 import unittest
-from httpserver import HttpErrors
-from httpserver import HtCode
-from httpserver import ZeroAnswer
-from httpserver import HttpRequest
-from httpserver import HttpResponse
 from httpserver import BaseServer
 
 
@@ -46,7 +30,7 @@ class Test_serv(unittest.TestCase):
         # перевірка на успішність запиту
         self.assertEqual(headers["Connection"], "Keep-Alive")
 
-    def test_method_headers(self):
+    def test_method_headers_2(self):
         params = BaseServer.get(self.app, "127.0.01:8080/search?k=v&k1=v1")
         self.assertEqual(params["k"], "v")
         self.assertEqual(params["k1"], "v1")

@@ -1,12 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import socket
-import sys
 import os.path
 import re
 from email.utils import formatdate
 import logging
 import multiprocessing
-from multiprocessing import Queue
-from multiprocessing import Manager
 from multiprocessing import Pipe
 from time import sleep
 import signal
@@ -421,7 +420,7 @@ class BaseServer(object):
     def master_process(self):
         try:
             sleep(0.01)
-            if self.ISTERM == True:
+            if self.ISTERM:
                 command = "y"
                 raise KeyboardInterrupt('outside INTERUPT signal')
 
@@ -501,14 +500,12 @@ class BaseServer(object):
 
             except socket.timeout as e:
                 self.logger.info("Time Out of Socket")
-                #raise HttpErrors(418)
                 err = "<h1>Time Out of Socket</h1>"
                 self.client_sock.send(err.encode())
                 self.client_sock.close()
 
             except socket.error as e:
                 self.logger.info("Error Socket")
-                #raise HttpErrors(418)
                 self.client_sock.close()
 
             except HttpErrors as e:
@@ -526,8 +523,7 @@ class BaseServer(object):
         self.serv_sock = socket.socket()
         self.serv_sock.bind((self.ip, self.port))
         self.serv_sock.listen(1000)
-
-        self.manager_d = Manager()
+        
         self.pid_dick_status = {}
         self.allProcesses = {}
         self.allProcesses[os.getpid()] = "master"
