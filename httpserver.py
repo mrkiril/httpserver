@@ -86,7 +86,7 @@ class HttpRequest(object):
 
     """ Class HttpRequest of this project.
         This class only construc structure of
-        request 
+        request
     """
 
     def __init__(self, COOKIE, scheme, body, path, method, encoding,
@@ -184,7 +184,7 @@ class BaseServer(object):
     """ Main class of this server.
         It contain serve_forever methods.
         Which can take request to the socket and give
-        an opportunity to send some response to it 
+        an opportunity to send some response to it
 
     """
 
@@ -236,8 +236,7 @@ class BaseServer(object):
 
     def recv_data(self, byte):
         self.client_sock.settimeout(10)
-        request = self.client_sock.recv(byte)
-        #self.logger.info( request )
+        request = self.client_sock.recv(byte)     
         self.client_sock.settimeout(None)
         return request
 
@@ -398,7 +397,7 @@ class BaseServer(object):
                 continue
             # close process
             self.logger.info("Just and kill >> " + str(pid))
-            if self.allProcesses[pid].is_alive() == True:
+            if self.allProcesses[pid].is_alive():
                 # close pid_dick_status means Pipe()
                 self.pid_dick_status[pid][1].close()
                 self.allProcesses[pid].terminate()
@@ -523,7 +522,6 @@ class BaseServer(object):
         self.serv_sock = socket.socket()
         self.serv_sock.bind((self.ip, self.port))
         self.serv_sock.listen(1000)
-        
         self.pid_dick_status = {}
         self.allProcesses = {}
         self.allProcesses[os.getpid()] = "master"
