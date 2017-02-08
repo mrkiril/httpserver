@@ -11,6 +11,7 @@ from time import sleep
 import signal
 import errno
 
+
 class HttpErrors(Exception):
 
     """Class HttpErrors
@@ -193,6 +194,7 @@ class BaseServer(object):
 
     """
     file_path = os.path.abspath(os.path.dirname(__file__))
+
     def __init__(self, ip, port):
         self.file_path = os.path.abspath(os.path.dirname(__file__))
         self.ip = ip
@@ -204,7 +206,7 @@ class BaseServer(object):
         self.table = []
         self.sock_list = []
         self.logger = logging.getLogger(__name__)
-        self.COOKIE = {"key": "value"}        
+        self.COOKIE = {"key": "value"}
         self.ISTERM = False
         self.isterm_status = False
         self.configure()
@@ -441,16 +443,15 @@ class BaseServer(object):
         except KeyboardInterrupt as e:
             try:
                 print("Are you sure that close the server ? y/n\r\n")
-                #command = input("Are you sure that close the server ? y/n\r\n")
                 command = "y"
             except EOFError as e:
                 self.logger.info("forced output")
                 command = "y"
-            if command in ["Y", "y", "Yes", "yes"]:                
+            if command in ["Y", "y", "Yes", "yes"]:
                 self.proc_terminate()
-                print( self.serv_sock )
+                print(self.serv_sock)
                 self.serv_sock.close()
-                print( self.serv_sock )
+                print(self.serv_sock)
                 return "exit"
 
             else:
@@ -469,7 +470,7 @@ class BaseServer(object):
                 self.serv_log(http_req.text)
                 s_path = self.pathfinder(http_req.path)
                 for it in range(len(self.table)):
-                    link_pat = re.search(self.table[it]["link"], s_path)                    
+                    link_pat = re.search(self.table[it]["link"], s_path)
                     if link_pat is None and it == (len(self.table) - 1):
                         self.logger.error("Error 404")
                         raise HttpErrors(404)
@@ -477,8 +478,8 @@ class BaseServer(object):
 
                     if link_pat is not None:
                         self.logger.info(
-                            self.table[it]["link"] + "\t" + http_req.path)                        
-                        
+                            self.table[it]["link"] + "\t" + http_req.path)
+
                         if http_req.method not in self.table[it]["method"]:
                             self.logger.error("Error 405")
                             raise HttpErrors(423)
@@ -494,7 +495,7 @@ class BaseServer(object):
                                 "funk"](request=http_req)
 
                         response = http_resp.resp_constr()
-                        #print(response[:300])
+                        # print(response[:300])
                         self.send_data(response.encode())
                         self.serv_log(b"\r\nResponse\r\n" +
                                       response.encode() + b"\r\nRequest\r\n")
@@ -512,7 +513,7 @@ class BaseServer(object):
                 self.client_sock.close()
 
             except socket.error as e:
-                self.logger.info("Error Socket. "+str(os.strerror(e.errno)))
+                self.logger.info("Error Socket. " + str(os.strerror(e.errno)))
                 self.client_sock.close()
 
             except HttpErrors as e:
