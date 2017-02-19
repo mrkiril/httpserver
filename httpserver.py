@@ -166,7 +166,7 @@ class HttpResponse(object):
             q += "Connection: close" + CRLF
             if self.content is not None:
                 byte_len = str(len(self.content))
-                q += "Content_Length: " + str(byte_len) + CRLF
+                q += "Content-Length: " + str(byte_len) + CRLF
                 q += "Content-Type: " + \
                     str(self.content_type) + "; charset=utf-8" + CRLF
             if self.set_cookie != {}:
@@ -224,7 +224,6 @@ class BaseServer(object):
         pass
 
     def add_route(self, link, function, method=["GET"]):
-        # self.table.append({"link": link,"funk": function, "method": method})
         self.table.append({"link": link, "funk": function, "method": method})
 
     def find_headers(self,  all_headers):
@@ -248,7 +247,8 @@ class BaseServer(object):
 
     def send_data(self, byte):
         self.client_sock.settimeout(10)
-        self.client_sock.send(byte)
+        num = self.client_sock.send(byte)
+        self.logger.info("server send: "+str(num))
         self.client_sock.settimeout(None)
 
     def get(self, link):
@@ -316,13 +316,12 @@ class BaseServer(object):
         if inp_met in meth:
             text = req
             while True:
-                text += self.recv_data(65535)
+                text += self.recv_data(65536)
                 if b"\r\n\r\n" in text:
                     start, end = re.search(b"\r\n\r\n", text).span()
                     # Find geaders method
                     # return dicktionery
                     headers = self.find_headers(text[:start].decode())
-
                     if inp_met == "GET":
                         get_params = self.get(path)
                         content_type = None
@@ -345,15 +344,10 @@ class BaseServer(object):
                             accept_encoding = headers["Accept-Encoding"]
 
                         if "Content-Length" in headers:
-
-                            try:
-                                text = self.content_length2(
-                                    text,
-                                    int(headers["Content-Length"]),
-                                    end)
-                            except Exception as e:
-                                self.logger.error(
-                                    'Content-Length mode Exception')
+                            text = self.content_length2(
+                                text,
+                                int(headers["Content-Length"]),
+                                end)
 
                         post_params, post_body, post_fies = self.post(
                             text[end:], headers)
@@ -449,9 +443,7 @@ class BaseServer(object):
                 command = "y"
             if command in ["Y", "y", "Yes", "yes"]:
                 self.proc_terminate()
-                print(self.serv_sock)
                 self.serv_sock.close()
-                print(self.serv_sock)
                 return "exit"
 
             else:
@@ -467,7 +459,6 @@ class BaseServer(object):
                 self.client_sock, self.client_addr = self.serv_sock.accept()
                 child_conn.send("on")
                 http_req = self.take_req()
-                self.serv_log(http_req.text)
                 s_path = self.pathfinder(http_req.path)
                 for it in range(len(self.table)):
                     link_pat = re.search(self.table[it]["link"], s_path)
@@ -482,23 +473,14 @@ class BaseServer(object):
 
                         if http_req.method not in self.table[it]["method"]:
                             self.logger.error("Error 405")
-                            raise HttpErrors(423)
-
-                        if self.table[it]["funk"].__code__.co_argcount == 3:
-                            self.logger.info(
-                                "Enter to the 3 parameters block")
-                            http_resp = self.table[it]["funk"](
-                                request=http_req, name=s_path[1:])
+                            raise HttpErrors(405)
 
                         else:
                             http_resp = self.table[it][
                                 "funk"](request=http_req)
 
                         response = http_resp.resp_constr()
-                        # print(response[:300])
                         self.send_data(response.encode())
-                        self.serv_log(b"\r\nResponse\r\n" +
-                                      response.encode() + b"\r\nRequest\r\n")
                         self.client_sock.close()
                         self.logger.info("End")
                         break
@@ -518,10 +500,6 @@ class BaseServer(object):
 
             except HttpErrors as e:
                 err = e.geterr().resp_constr()
-
-                self.serv_log(b"\r\nResponse\r\n" +
-                              err.encode() + b"\r\nRequest\r\n")
-
                 self.logger.info("Http error: " + str(e.err_number))
                 self.client_sock.send(err.encode())
                 self.client_sock.close()
