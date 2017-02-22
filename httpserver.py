@@ -5,7 +5,7 @@ import os.path
 import re
 from email.utils import formatdate
 import logging
-import multiprocessing
+from multiprocessing import Process
 from multiprocessing import Pipe
 from time import sleep
 import signal
@@ -19,18 +19,20 @@ class HttpErrors(Exception):
     Method "getter" construct answer to the request
     """
 
-    def __init__(self, err_number):
+    def __init__(self, err_number, headers={}):
         self.err_number = err_number
+        self.headers = headers
 
     def __str__(self):
         return repr("HTTP ERROR " + self.err_number +
-                    " - " + self.errdic[self.err_number])
+                    " - " + HtCode.get_story(str(self.err_number)))
 
     def geterr(self):
         content = "<h1>HTTP ERROR " + \
             str(self.err_number) + " - " + \
             HtCode.get_story(self.err_number) + "</h1>"
-        r = HttpResponse(status_code=self.err_number)
+        r = HttpResponse(status_code=self.err_number,
+                         headers=self.headers)
 
         r.content_type = 'text/html'
         r.content = content
@@ -63,7 +65,10 @@ class HtCode(object):
         "302": "Moved Temporarily",
         "400": "Bad Request",
         "404": "Not Found",
+        "405": "Method Not Allowed ",
         "408": "Request Timeout",
+        "414": "Request-URL Too Long",
+        "415": "Unsupported Media Type",
         "418": "I'm a teapot ",
         "423": "Locked",
         "500": "Internal Server Error",
@@ -131,6 +136,7 @@ class HttpResponse(object):
         self.status_code = 200
         self.story_code = "OK"
         self.content_type = "text/html"
+        self.headers = {}
         # redirect location
         self.location = "/"
         self.content = None
@@ -151,6 +157,9 @@ class HttpResponse(object):
         if "location" in kwargs:
             self.location = kwargs["location"]
 
+        if "headers" in kwargs:
+            self.headers = kwargs["headers"]
+
     def set_cookie(self, key, value):
         self.set_cookies[key] = value
         return self.set_cookies
@@ -163,6 +172,9 @@ class HttpResponse(object):
         if str(self.status_code)[0] in ["2", "3", "4", "5"]:
             q += "HTTP/1.1 {0} {1}".format(self.status_code,
                                            self.story_code) + CRLF
+            if self.headers != {}:
+                for k, v in self.headers.items():
+                    q += str(k) + ": " + str(v) + CRLF
             q += "Connection: close" + CRLF
             if self.content is not None:
                 byte_len = str(len(self.content))
@@ -204,11 +216,8 @@ class BaseServer(object):
         self.client_sock = None
         self.client_addr = None
         self.table = []
-        self.sock_list = []
         self.logger = logging.getLogger(__name__)
-        self.COOKIE = {"key": "value"}
         self.ISTERM = False
-        self.isterm_status = False
         self.configure()
 
     def __exit__(self):
@@ -228,15 +237,10 @@ class BaseServer(object):
 
     def find_headers(self,  all_headers):
         headers = {}
-        # get out first rows
-        all_headers = all_headers[int(re.search(".+?\r\n",
-                                                all_headers).span()[1]):]
-        # Parsing headers
         hblock = all_headers.split("\r\n")
         for bl in hblock:
             bl_patt = bl.split(": ")
-            headers[bl_patt[0]] = bl_patt[1]
-
+            headers[bl_patt[0].lower()] = bl_patt[1]
         return headers
 
     def recv_data(self, byte):
@@ -248,10 +252,10 @@ class BaseServer(object):
     def send_data(self, byte):
         self.client_sock.settimeout(10)
         num = self.client_sock.send(byte)
-        self.logger.info("server send: "+str(num))
+        self.logger.info("server send: " + str(num))
         self.client_sock.settimeout(None)
 
-    def get(self, link):
+    def get_method(self, link):
         args = {}
         if "?" not in link:
             pass
@@ -262,16 +266,34 @@ class BaseServer(object):
                 args[pat[0]] = pat[1]
         return args
 
-    def post(self, this_t, headers):
+    def post_method(self, this_t, headers):
         this_t = this_t.decode()
         p_par = {}
         p_body = ""
         p_files = []
-        if headers["Content-Type"] == "application/x-www-form-urlencoded":
-            for ar in this_t.split("&"):
-                pat = ar.split("=")
-                p_par[pat[0]] = pat[1]
+        if "content-type" in headers:
+            if headers["content-type"] == "application/x-www-form-urlencoded":
+                for ar in this_t.split("&"):
+                    if "=" in ar:
+                        pat = ar.split("=", 1)
+                        if pat[0] in p_par:
+                            p_par[pat[0]].append(pat[1])
+                        else:
+                            p_par[pat[0]] = [pat[1]]
 
+                    elif "=" not in ar and len(ar) != 0:
+                        if ar in p_par:
+                            p_par[ar].append("")
+                        else:
+                            p_par[ar] = [""]
+
+                for k, v in p_par.items():
+                    if len(v) == 1:
+                        p_par[k] = v[0]
+
+            pat = re.search("multipart/", headers["content-type"])
+            if pat is not None:
+                raise HttpErrors(405)
         return (p_par, p_body, p_files)
 
     def content_length2(self, text, c_len, end):
@@ -279,19 +301,22 @@ class BaseServer(object):
             text += self.recv_data(c_len)
         return text
 
-    def serv_log(self, text):
-        str_path = os.path.join(self.file_path, "logs.txt")
-        try:
-            with open(str_path, "ab") as fp:
-                file = fp.write(text)
-
-        except FileNotFoundError as e:
-            with open(str_path, "wb") as fp:
-                file = fp.write(text)
+    def req_line(self):
+        req = b""
+        for i in range(10):
+            req += self.recv_data(20)
+            fline_pat = re.match(br"^\s*?(\w+) ([^ ]+) ([^ ]+)\r\n", req)
+            if fline_pat is not None:
+                break
+        if fline_pat is None:
+            raise HttpErrors(414)
+        inp_met = fline_pat.group(1).decode()
+        path = fline_pat.group(2).decode()
+        scheme = fline_pat.group(3).decode()
+        req_req = req[fline_pat.span()[1]:]
+        return (inp_met, path, scheme, req_req)
 
     def take_req(self):
-        # parsing request and
-        # create HttpRequest object
         CRLF = b"\r\n"
         get_params = None
         post_params = None
@@ -299,69 +324,51 @@ class BaseServer(object):
         post_fies = None
         COOKIE = {}
         meth = ["GET", "POST", "HEAD", "DELETE", "PUT"]
-        req = b""
-        while True:
-            data = self.recv_data(20)
-            req += data
-            if CRLF in req or data == b"":
-                fline_pat = re.match(b"(\w+) ([^ ]+) ([^ ]+)\r\n", req)
-                break
-
-        if fline_pat is None:
-            raise HttpErrors(400)
-
-        inp_met = fline_pat.group(1).decode()
-        path = fline_pat.group(2).decode()
-        scheme = fline_pat.group(3).decode()
+        inp_met, path, scheme, text = self.req_line()
         if inp_met in meth:
-            text = req
             while True:
                 text += self.recv_data(65536)
                 if b"\r\n\r\n" in text:
                     start, end = re.search(b"\r\n\r\n", text).span()
-                    # Find geaders method
-                    # return dicktionery
                     headers = self.find_headers(text[:start].decode())
                     if inp_met == "GET":
-                        get_params = self.get(path)
+                        get_params = self.get_method(path)
                         content_type = None
-                        if "Content-Type" in headers:
-                            content_type = headers["Content-Type"]
+                        if "content-type" in headers:
+                            content_type = headers["content-type"]
 
                         accept_encoding = None
-                        if "Accept-Encoding" in headers:
-                            accept_encoding = headers["Accept-Encoding"]
+                        if "accept-encoding" in headers:
+                            accept_encoding = headers["accept-encoding"]
                         break
 
                     if inp_met == "POST" or inp_met == "PUT":
-
                         content_type = None
-                        if "Content-Type" in headers:
-                            content_type = headers["Content-Type"]
+                        if "content-type" in headers:
+                            content_type = headers["content-type"]
 
                         accept_encoding = None
-                        if "Accept-Encoding" in headers:
-                            accept_encoding = headers["Accept-Encoding"]
+                        if "accept-encoding" in headers:
+                            accept_encoding = headers["accept-encoding"]
 
-                        if "Content-Length" in headers:
+                        if "content-length" in headers:
                             text = self.content_length2(
                                 text,
-                                int(headers["Content-Length"]),
+                                int(headers["content-length"]),
                                 end)
 
-                        post_params, post_body, post_fies = self.post(
+                        post_params, post_body, post_fies = self.post_method(
                             text[end:], headers)
                         break
 
-            COOKIE = {}
-            if "Cookie" in headers:
-                if "; " in headers["Cookie"]:
-                    for coo in headers["Cookie"].split("; "):
+            if "cookie" in headers:
+                if "; " in headers["cookie"]:
+                    for coo in headers["cookie"].split("; "):
                         cook_arr = coo.split("=")
                         COOKIE[cook_arr[0]] = cook_arr[1]
 
-                if "; " not in headers["Cookie"]:
-                    cook_arr = headers["Cookie"].split("=")
+                if "; " not in headers["cookie"]:
+                    cook_arr = headers["cookie"].split("=")
                     COOKIE[cook_arr[0]] = cook_arr[1]
 
             http_req = HttpRequest(
@@ -407,7 +414,7 @@ class BaseServer(object):
 
     def create_process(self):
         parent_conn, child_conn = Pipe()
-        p = multiprocessing.Process(
+        p = Process(
             target=self.serve_multi,
             daemon=True,
             name='more_',
@@ -463,17 +470,16 @@ class BaseServer(object):
                 for it in range(len(self.table)):
                     link_pat = re.search(self.table[it]["link"], s_path)
                     if link_pat is None and it == (len(self.table) - 1):
-                        self.logger.error("Error 404")
                         raise HttpErrors(404)
-                        break
 
                     if link_pat is not None:
                         self.logger.info(
                             self.table[it]["link"] + "\t" + http_req.path)
 
                         if http_req.method not in self.table[it]["method"]:
-                            self.logger.error("Error 405")
-                            raise HttpErrors(405)
+                            raise HttpErrors(
+                                415, {"Allow": ", ".join(
+                                    self.table[it]["method"])})
 
                         else:
                             http_resp = self.table[it][
