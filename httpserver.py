@@ -220,12 +220,6 @@ class BaseServer(object):
         self.ISTERM = False
         self.configure()
 
-    def __exit__(self):
-        self.serv_sock.close()
-        for proc in self.allProcesses.keys():
-            self.logger.info(str(proc))
-            os.kill(proc, signal.SIGKILL)
-
     def setting(self):
         pass
 
@@ -397,17 +391,16 @@ class BaseServer(object):
         re_path = re.match("(https?://)?[^/]*(.*)", s_path, re.DOTALL)
         return re_path.group(2)
 
-    def proc_terminate(self):
+    def proc_terminate(self):        
         keys = list(self.allProcesses.keys())[:]
         for pid in keys:
-            if pid == self.master_pid:
-                continue
             # close process
             self.logger.info("Just and kill >> " + str(pid))
             if self.allProcesses[pid].is_alive():
                 # close pid_dick_status means Pipe()
                 self.pid_dick_status[pid][1].close()
                 self.allProcesses[pid].terminate()
+
             # clear all process and Pipes
             self.pid_dick_status.pop(pid)
             self.allProcesses.pop(pid)
@@ -416,7 +409,7 @@ class BaseServer(object):
         parent_conn, child_conn = Pipe()
         p = Process(
             target=self.serve_multi,
-            daemon=True,
+            daemon=False,
             name='more_',
             args=(child_conn,))
         p.start()
@@ -451,18 +444,19 @@ class BaseServer(object):
             if command in ["Y", "y", "Yes", "yes"]:
                 self.proc_terminate()
                 self.serv_sock.close()
+                self.logger.info("Serv sock")                
                 return "exit"
-
             else:
                 self.proc_terminate()
                 self.ISTERM = False
 
     def serve_multi(self, child_conn):
         self.child_conn = child_conn
+        signal.signal(signal.SIGTERM, self.signal_term_child_handler)
         while True:
             child_conn.send("off")
-            self.logger.info('Wait for conection ... ' + str(os.getpid()))
             try:
+                self.logger.info('Wait for conection ... ' + str(os.getpid()))
                 self.client_sock, self.client_addr = self.serv_sock.accept()
                 child_conn.send("on")
                 http_req = self.take_req()
@@ -487,11 +481,15 @@ class BaseServer(object):
 
                         response = http_resp.resp_constr()
                         self.send_data(response.encode())
+
                         self.client_sock.close()
                         self.logger.info("End")
                         break
 
             except KeyboardInterrupt as e:
+                self.child_conn.close()
+                if self.client_sock is not None:
+                    self.client_sock.close()                
                 break
 
             except socket.timeout as e:
@@ -501,8 +499,14 @@ class BaseServer(object):
                 self.client_sock.close()
 
             except socket.error as e:
-                self.logger.info("Error Socket. " + str(os.strerror(e.errno)))
+                self.logger.error(
+                    'Error Socket. ' + str(e.errno) +
+                    " " + os.strerror(e.errno))
                 self.client_sock.close()
+                err = HttpErrors(500).resp_constr()
+                self.client_sock.send(err.encode())
+                self.client_sock.close()
+                break
 
             except HttpErrors as e:
                 err = e.geterr().resp_constr()
@@ -513,11 +517,11 @@ class BaseServer(object):
     def serve_forever(self):
         self.logger = logging.getLogger(__name__)
         self.serv_sock = socket.socket()
+        self.serv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.serv_sock.bind((self.ip, self.port))
         self.serv_sock.listen(1000)
         self.pid_dick_status = {}
         self.allProcesses = {}
-        self.allProcesses[os.getpid()] = "master"
         self.master_pid = os.getpid()
         signal.signal(signal.SIGINT, self.signal_inter_master_handler)
         for i in range(2):
@@ -533,6 +537,7 @@ class BaseServer(object):
 
     def signal_inter_master_handler(self, signal, frame):
         self.ISTERM = True
+        self.logger.info("take term signal server")
 
     def signal_term_child_handler(self, signal, frame):
-        self.child_conn.close()
+        raise KeyboardInterrupt
