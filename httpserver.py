@@ -10,6 +10,7 @@ from multiprocessing import Pipe
 from time import sleep
 import signal
 import errno
+import datetime
 
 
 class HttpErrors(Exception):
@@ -133,7 +134,7 @@ class HttpResponse(object):
     """
 
     def __init__(self, *args, **kwargs):
-        self.status_code = 200
+        self.status_code = "200"
         self.story_code = "OK"
         self.content_type = "text/html"
         self.headers = {}
@@ -141,7 +142,6 @@ class HttpResponse(object):
         self.location = "/"
         self.content = None
         self.set_cookies = {}
-        self.text = None
 
         for ar in args:
             self.content = ar
@@ -186,7 +186,7 @@ class HttpResponse(object):
                     q += ("Set-Cookie: {0}={1}; expires=Fri,"
                           " 31 Dec 2019 23:59:59 GMT; path=/\r\n".format(
                               k, v, dt))
-            if self.status_code in ["301", "302"]:
+            if str(self.status_code)[0] == "3":
                 q += "Location: " + self.location + CRLF
 
             q += "Date: " + dt + CRLF

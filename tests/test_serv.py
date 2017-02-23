@@ -5,8 +5,10 @@ import os.path
 import unittest
 import socket
 import json
+import datetime
+from email.utils import formatdate
 from httpserver import BaseServer
-
+from httpserver import HttpResponse
 
 class Test_serv(unittest.TestCase):
 
@@ -94,11 +96,18 @@ class Test_serv(unittest.TestCase):
         self.assertEqual(path, "/search")
 
 
-    
+    def test_resp_constr(self):
+        #date = str(datetime.datetime.fromtimestamp(
+        #    unix).strftime('%Y-%m-%d %H:%M:%S'))
+        #print(date)
 
-
-
-
+        dt = formatdate(timeval=None, localtime=False, usegmt=True)
+        print(dt)
+        
+        self.resp = HttpResponse()
+        self.resp.status_code = "200"
+        respp = self.resp.resp_constr()
+        print(respp)
 
 
 
