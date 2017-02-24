@@ -281,7 +281,6 @@ class BaseServer(object):
 
     def get_method(self, link):
         args = {}
-        print(link)
         if "?" not in link:
             pass
         if "?" in link:
