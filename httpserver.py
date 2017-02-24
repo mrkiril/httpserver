@@ -20,36 +20,39 @@ class HttpErrors(Exception):
     Method "getter" construct answer to the request
     """
 
-    def __init__(self, err_number, headers={}):
+    def __init__(self, err_number, err_headers={}, err_message=""):
         self.err_number = err_number
-        self.headers = headers
+        self.err_headers = err_headers
+        self.err_message = err_message
+        self.file_path = os.path.abspath(os.path.dirname(__file__))
 
     def __str__(self):
         return repr("HTTP ERROR " + self.err_number +
                     " - " + HtCode.get_story(str(self.err_number)))
 
     def geterr(self):
-        content = "<h1>HTTP ERROR " + \
-            str(self.err_number) + " - " + \
-            HtCode.get_story(self.err_number) + "</h1>"
-        r = HttpResponse(status_code=self.err_number,
-                         headers=self.headers)
+        with open(os.path.join(self.file_path,
+                               "pages",
+                               "http_ans.html"), "r") as fp:
+            data = fp.read()
+        story_code = HtCode.get_story(str(self.err_number))
+        data = re.sub('<h1 name="number">Ooops ... Error .*?</h1>',
+                      '<h1 name="number">Ooops ... Error ' +
+                      str(self.err_number) +
+                      '</h1>', data)
 
-        r.content_type = 'text/html'
-        r.content = content
-        if self.err_number == 404:
-            with open(os.path.join(os.path.abspath(os.path.dirname(__file__)),
-                                   "pages",
-                                   "404.html")) as fp:
-                r.content = fp.read()
+        data = re.sub('<h1 name="description"><small></small></h1>',
+                      '<h1 name="description"><small>' + story_code +
+                      '</small></h1>', data)
 
-        if self.err_number == 418:
-            with open(os.path.join(os.path.abspath(os.path.dirname(__file__)),
-                                   "pages",
-                                   "418.html")) as fp:
-                r.content = fp.read()
+        data = re.sub('<h1 name="err_message"><small></small></h1>',
+                      '<h1 name="description"><small>' + self.err_message +
+                      '</small></h1>', data)
 
-        return r
+        return HttpResponse(data,
+                            status_code=str(self.err_number),
+                            headers=self.err_headers,
+                            content_type='html')
 
 
 class HtCode(object):
@@ -68,6 +71,7 @@ class HtCode(object):
         "404": "Not Found",
         "405": "Method Not Allowed ",
         "408": "Request Timeout",
+        "411": "Length Required",
         "414": "Request-URL Too Long",
         "415": "Unsupported Media Type",
         "418": "I'm a teapot ",
@@ -164,6 +168,13 @@ class HttpResponse(object):
         self.set_cookies[key] = value
         return self.set_cookies
 
+    def cookie_str_for_headers(self, k, v):
+        Y = str(int(datetime.date.today().strftime("%Y")) + 1)
+        cook = ("Set-Cookie: {0}={1}; expires=Fri,"
+                " 31 Dec " + Y + " 23:59:59 GMT; path=/\r\n".format(k, v)
+                )
+        return cook
+
     def resp_constr(self):
         dt = formatdate(timeval=None, localtime=False, usegmt=True)
         CRLF = "\r\n"
@@ -183,9 +194,7 @@ class HttpResponse(object):
                     str(self.content_type) + "; charset=utf-8" + CRLF
             if self.set_cookie != {}:
                 for k, v in self.set_cookies.items():
-                    q += ("Set-Cookie: {0}={1}; expires=Fri,"
-                          " 31 Dec 2019 23:59:59 GMT; path=/\r\n".format(
-                              k, v, dt))
+                    q += self.cookie_str_for_headers(k, v)
             if str(self.status_code)[0] == "3":
                 q += "Location: " + self.location + CRLF
 
@@ -249,15 +258,35 @@ class BaseServer(object):
         self.logger.info("server send: " + str(num))
         self.client_sock.settimeout(None)
 
+    def pars_pairs(self, this_t):
+        p_par = {}
+        for ar in this_t.split("&"):
+            if "=" in ar:
+                pat = ar.split("=", 1)
+                if pat[0] in p_par:
+                    p_par[pat[0]].append(pat[1])
+                else:
+                    p_par[pat[0]] = [pat[1]]
+
+            elif "=" not in ar and len(ar) != 0:
+                if ar in p_par:
+                    p_par[ar].append("")
+                else:
+                    p_par[ar] = [""]
+
+        for k, v in p_par.items():
+            if len(v) == 1:
+                p_par[k] = v[0]
+        return p_par
+
     def get_method(self, link):
         args = {}
+        print(link)
         if "?" not in link:
             pass
         if "?" in link:
-            arr = "".join(link.split("?")[1:])
-            for ar in arr.split("&"):
-                pat = ar.split("=")
-                args[pat[0]] = pat[1]
+            pairs_str = "".join(link.split("?")[1:])
+            args = self.pars_pairs(pairs_str)
         return args
 
     def post_method(self, this_t, headers):
@@ -267,23 +296,7 @@ class BaseServer(object):
         p_files = []
         if "content-type" in headers:
             if headers["content-type"] == "application/x-www-form-urlencoded":
-                for ar in this_t.split("&"):
-                    if "=" in ar:
-                        pat = ar.split("=", 1)
-                        if pat[0] in p_par:
-                            p_par[pat[0]].append(pat[1])
-                        else:
-                            p_par[pat[0]] = [pat[1]]
-
-                    elif "=" not in ar and len(ar) != 0:
-                        if ar in p_par:
-                            p_par[ar].append("")
-                        else:
-                            p_par[ar] = [""]
-
-                for k, v in p_par.items():
-                    if len(v) == 1:
-                        p_par[k] = v[0]
+                p_par = self.pars_pairs(this_t)
 
             pat = re.search("multipart/", headers["content-type"])
             if pat is not None:
@@ -336,12 +349,12 @@ class BaseServer(object):
                             accept_encoding = headers["accept-encoding"]
                         break
 
-                    if inp_met == "POST" or inp_met == "PUT":
+                    if inp_met in ["POST", "PUT"]:
                         content_type = None
+                        accept_encoding = None
                         if "content-type" in headers:
                             content_type = headers["content-type"]
 
-                        accept_encoding = None
                         if "accept-encoding" in headers:
                             accept_encoding = headers["accept-encoding"]
 
@@ -350,7 +363,8 @@ class BaseServer(object):
                                 text,
                                 int(headers["content-length"]),
                                 end)
-
+                        else:
+                            raise HttpErrors(411)
                         post_params, post_body, post_fies = self.post_method(
                             text[end:], headers)
                         break
@@ -391,7 +405,7 @@ class BaseServer(object):
         re_path = re.match("(https?://)?[^/]*(.*)", s_path, re.DOTALL)
         return re_path.group(2)
 
-    def proc_terminate(self):        
+    def proc_terminate(self):
         keys = list(self.allProcesses.keys())[:]
         for pid in keys:
             # close process
@@ -444,7 +458,7 @@ class BaseServer(object):
             if command in ["Y", "y", "Yes", "yes"]:
                 self.proc_terminate()
                 self.serv_sock.close()
-                self.logger.info("Serv sock")                
+                self.logger.info("Serv sock")
                 return "exit"
             else:
                 self.proc_terminate()
@@ -465,23 +479,21 @@ class BaseServer(object):
                     link_pat = re.search(self.table[it]["link"], s_path)
                     if link_pat is None and it == (len(self.table) - 1):
                         raise HttpErrors(404)
-
                     if link_pat is not None:
                         self.logger.info(
                             self.table[it]["link"] + "\t" + http_req.path)
 
                         if http_req.method not in self.table[it]["method"]:
                             raise HttpErrors(
-                                415, {"Allow": ", ".join(
+                                err_number=415,
+                                err_headers={"Allow": ", ".join(
                                     self.table[it]["method"])})
-
                         else:
                             http_resp = self.table[it][
                                 "funk"](request=http_req)
 
                         response = http_resp.resp_constr()
                         self.send_data(response.encode())
-
                         self.client_sock.close()
                         self.logger.info("End")
                         break
@@ -489,7 +501,7 @@ class BaseServer(object):
             except KeyboardInterrupt as e:
                 self.child_conn.close()
                 if self.client_sock is not None:
-                    self.client_sock.close()                
+                    self.client_sock.close()
                 break
 
             except socket.timeout as e:
@@ -499,11 +511,12 @@ class BaseServer(object):
                 self.client_sock.close()
 
             except socket.error as e:
-                self.logger.error(
-                    'Error Socket. ' + str(e.errno) +
-                    " " + os.strerror(e.errno))
-                self.client_sock.close()
-                err = HttpErrors(500).resp_constr()
+                self.logger.error('Error Socket. ' + str(e.errno) +
+                                  " " + os.strerror(e.errno))
+                err = HttpErrors(
+                    err_number=500,
+                    err_message="something wrong with internet connection")
+                err = err.geterr().resp_constr()
                 self.client_sock.send(err.encode())
                 self.client_sock.close()
                 break

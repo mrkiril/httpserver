@@ -6,9 +6,11 @@ import unittest
 import socket
 import json
 import datetime
+import time
 from email.utils import formatdate
 from httpserver import BaseServer
 from httpserver import HttpResponse
+
 
 class Test_serv(unittest.TestCase):
 
@@ -19,72 +21,99 @@ class Test_serv(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def test_method_headers(self):        
+    def test_method_headers(self):
         str_headers = "Host: www.site.ru\r\n"
         str_headers += "Referer: http://www.site.ru/index.html\r\n"
         str_headers += "User-Agent: Mozilla/4.0\r\n"
         str_headers += "Accept-Language: en-us\r\n"
         str_headers += "Connection: Keep-Alive\r\n"
         str_headers += "\r\n"
-        headers = self.app.find_headers(str_headers[:-4])        
+        headers = self.app.find_headers(str_headers[:-4])
         self.assertEqual(headers["connection"], "Keep-Alive")
-
 
     def test_method_headers_2(self):
         params = self.app.get_method("127.0.01:8080/search?k=v&k1=v1")
         self.assertEqual(params["k"], "v")
         self.assertEqual(params["k1"], "v1")
 
-
     def test_get_method(self):
-        text = "GET http://www.google.com.ua HTTP/1.0\r\n"
-        text += "Host: www.site.ru\r\n"
-        text += "Referer: http://www.site.ru/index.html\r\n"
-        text += "User-Agent: Mozilla/4.0\r\n"
-        text += "Accept-Language: en-us\r\n"
-        text += "Connection: Keep-Alive\r\n"
-        text += "Content-Length: 8\r\n"
-        text += "\r\n"
-        text += "hh=ppppp"
-        end = re.search("\r\n\r\n", text).span()[1]
-        params = self.app.content_length2(text, 8, end)
-        self.assertEqual(params, text)
+        self.get("key=value&key&ley=va=lue&=val&&kk")
+        self.get("key=value&key=ley")
+        self.get("key=value&key")
+        self.get("key=value&=")
+        self.get("&&&&===")
 
-
-
-    def test_post_method(self):
-        # Equals wits  key-value pairs application/x-www-form-urlencoded
+    def get(self, pairs):
+        # Equals wits  key-value pairs in GET
         # httpbin and serv
         #
-        par = b"key=value&key&ley=va=lue&=val&&kk"
-        headers = {}
-        headers["content-type"] = "application/x-www-form-urlencoded"
-        params = self.app.post_method(par, headers)
-        data_serv, p_body, p_files = params
-        
-
+        link = "httpbin.org/get?" + pairs
+        params = self.app.get_method(link)
+        data_serv = params
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         addr = ("httpbin.org", 80)
         sock.connect(addr)
         CRLF = b"\r\n"
-        q = b"GET http://httpbin.org/get?"+par+ b" HTTP/1.1" + CRLF
+        q = b"GET http://httpbin.org/get?" + \
+            pairs.encode() + b" HTTP/1.1" + CRLF
         q += b"User-Agent: Mozilla/4.0" + CRLF
         q += b"Host: httpbin.org" + CRLF
         q += b"Connection: Close" + CRLF
         q += CRLF
-
-        sock.send(q) 
+        sock.send(q)
         response = sock.recv(65535)
         sock.close()
         status = re.search(b"HTTP.*? (\d+) ", response[:16])
         status_code = status.group(1).decode()
         start, end = re.search(b"\r\n\r\n", response).span()
-        self.assertEqual(status_code, "200")             
-        headers = self.app.find_headers(response[:start].decode().split("\r\n", 1)[1])
+        headers = self.app.find_headers(
+            response[:start].decode().split("\r\n", 1)[1])
         data_json = json.loads(response[end:].decode())
 
-
+        self.assertEqual(status_code, "200")
         self.assertEqual(data_serv, data_json["args"])
+
+    def post(self, pairs):
+        # Equals wits  key-value pairs application/x-www-form-urlencoded
+        # httpbin and serv
+        #
+        par = pairs.encode()
+        length = str(len(par))
+        headers = {}
+        headers["content-type"] = "application/x-www-form-urlencoded"
+        params = self.app.post_method(par, headers)
+        data_serv, p_body, p_files = params
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        addr = ("httpbin.org", 80)
+        sock.connect(addr)
+        CRLF = b"\r\n"
+        q = b"POST http://httpbin.org/post" + b" HTTP/1.1" + CRLF
+        q += b"User-Agent: Mozilla/4.0" + CRLF
+        q += b"Host: httpbin.org" + CRLF
+        q += b"Content-Length: " + length.encode() + CRLF
+        q += b"Content-Type: application/x-www-form-urlencoded" + CRLF
+        q += b"Connection: Close" + CRLF
+        q += CRLF
+        q += par
+        sock.send(q)
+        response = sock.recv(65535)
+        sock.close()
+        status = re.search(b"HTTP.*? (\d+) ", response[:16])
+        status_code = status.group(1).decode()
+        start, end = re.search(b"\r\n\r\n", response).span()
+        headers = self.app.find_headers(
+            response[:start].decode().split("\r\n", 1)[1])
+        data_json = json.loads(response[end:].decode())
+
+        self.assertEqual(data_serv, data_json["form"])
+        self.assertEqual(status_code, "200")
+
+    def test_post_method(self):
+        self.post("key=value&key&ley=va=lue&=val&&kk")
+        self.post("key=value&key=ley")
+        self.post("key=value&key")
+        self.post("key=value&=")
+        self.post("&&&&===")
 
     def test_path_finder(self):
         link = "https://127.0.0.1:8080/search?q=pasha+volia"
@@ -94,25 +123,6 @@ class Test_serv(unittest.TestCase):
         link = "http://yandex.com/search?q=pasha+volia"
         path = self.app.pathfinder(link)
         self.assertEqual(path, "/search")
-
-
-    def test_resp_constr(self):
-        #date = str(datetime.datetime.fromtimestamp(
-        #    unix).strftime('%Y-%m-%d %H:%M:%S'))
-        #print(date)
-
-        dt = formatdate(timeval=None, localtime=False, usegmt=True)
-        print(dt)
-        
-        self.resp = HttpResponse()
-        self.resp.status_code = "200"
-        respp = self.resp.resp_constr()
-        print(respp)
-
-
-
-
-
 
 
 if __name__ == '__main__':
