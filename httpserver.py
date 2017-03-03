@@ -146,7 +146,7 @@ class HttpResponse(object):
         self.location = "/"
         self.content = None
         self.set_cookies = {}
-
+        self.cookies_expires = None
         for ar in args:
             self.content = ar
 
@@ -167,14 +167,23 @@ class HttpResponse(object):
         if "set_cookies" in kwargs:
             self.set_cookies = kwargs["set_cookies"]
 
+        if "cookies_expires" in kwargs:
+            self.cookies_expires = kwargs["cookies_expires"]
+
     def set_cookie(self, key, value):
         self.set_cookies[key] = value
         return self.set_cookies
 
     def cookie_str_for_headers(self, k, v):
         Y = str(int(datetime.date.today().strftime("%Y")) + 1)
-        cook = ("Set-Cookie: {0}={1}; expires=Fri,".format(k, v)
-                +" 31 Dec " + Y + " 23:59:59 GMT; path=/\r\n"
+        if self.cookies_expires is None:
+            y = datetime.datetime.utcnow().year
+            dt = datetime.datetime(y + 1, 11, 21, 16, 30)
+        else:
+            dt = self.cookies_expires
+        cook = ("Set-Cookie: {0}={1};".format(k, v)
+                + "expires=" +
+                str(dt.strftime('%A, %d-%b-%Y %H:%M:%S')) + " GMT; path=/\r\n"
                 )
         return cook
 
@@ -205,7 +214,7 @@ class HttpResponse(object):
             q += CRLF
         if self.content is not None:
             q = q.encode()
-            if type(self.content) is str: 
+            if type(self.content) is str:
                 q += self.content.encode()
             else:
                 q += self.content
@@ -220,6 +229,7 @@ class BaseServer(object):
         an opportunity to send some response to it
 
     """
+
     def __init__(self, ip, port):
         self.file_path = os.path.abspath(os.path.dirname(__file__))
         self.ip = ip
@@ -514,20 +524,20 @@ class BaseServer(object):
                 self.client_sock.close()
 
             except socket.error as e:
-                #self.logger.error('Error Socket. ' + str(e.errno) +
+                # self.logger.error('Error Socket. ' + str(e.errno) +
                 #                  " " + os.strerror(e.errno))
                 err = HttpErrors(
                     err_number=500,
                     err_message="something wrong with internet connection")
                 err = err.geterr().resp_constr()
-                self.client_sock.send(err.encode())
+                self.client_sock.send(err)
                 self.client_sock.close()
                 break
 
             except HttpErrors as e:
                 err = e.geterr().resp_constr()
                 self.logger.info("Http error: " + str(e.err_number))
-                self.client_sock.send(err.encode())
+                self.client_sock.send(err)
                 self.client_sock.close()
 
     def serve_forever(self):
