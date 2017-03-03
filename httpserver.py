@@ -191,7 +191,6 @@ class HttpResponse(object):
         dt = formatdate(timeval=None, localtime=False, usegmt=True)
         CRLF = "\r\n"
         q = ""
-
         if str(self.status_code)[0] in ["2", "3", "4", "5"]:
             q += "HTTP/1.1 {0} {1}".format(self.status_code,
                                            self.story_code) + CRLF
@@ -214,10 +213,7 @@ class HttpResponse(object):
             q += CRLF
         if self.content is not None:
             q = q.encode()
-            if type(self.content) is str:
-                q += self.content.encode()
-            else:
-                q += self.content
+            q += self.content
         return q
 
 
