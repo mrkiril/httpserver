@@ -164,14 +164,17 @@ class HttpResponse(object):
         if "headers" in kwargs:
             self.headers = kwargs["headers"]
 
+        if "set_cookies" in kwargs:
+            self.set_cookies = kwargs["set_cookies"]
+
     def set_cookie(self, key, value):
         self.set_cookies[key] = value
         return self.set_cookies
 
     def cookie_str_for_headers(self, k, v):
         Y = str(int(datetime.date.today().strftime("%Y")) + 1)
-        cook = ("Set-Cookie: {0}={1}; expires=Fri,"
-                " 31 Dec " + Y + " 23:59:59 GMT; path=/\r\n".format(k, v)
+        cook = ("Set-Cookie: {0}={1}; expires=Fri,".format(k, v)
+                +" 31 Dec " + Y + " 23:59:59 GMT; path=/\r\n"
                 )
         return cook
 
@@ -201,8 +204,11 @@ class HttpResponse(object):
             q += "Date: " + dt + CRLF
             q += CRLF
         if self.content is not None:
-            q += self.content
-
+            q = q.encode()
+            if type(self.content) is str: 
+                q += self.content.encode()
+            else:
+                q += self.content
         return q
 
 
@@ -214,8 +220,6 @@ class BaseServer(object):
         an opportunity to send some response to it
 
     """
-    file_path = os.path.abspath(os.path.dirname(__file__))
-
     def __init__(self, ip, port):
         self.file_path = os.path.abspath(os.path.dirname(__file__))
         self.ip = ip
@@ -492,7 +496,7 @@ class BaseServer(object):
                                 "funk"](request=http_req)
 
                         response = http_resp.resp_constr()
-                        self.send_data(response.encode())
+                        self.send_data(response)
                         self.client_sock.close()
                         self.logger.info("End")
                         break
@@ -510,8 +514,8 @@ class BaseServer(object):
                 self.client_sock.close()
 
             except socket.error as e:
-                self.logger.error('Error Socket. ' + str(e.errno) +
-                                  " " + os.strerror(e.errno))
+                #self.logger.error('Error Socket. ' + str(e.errno) +
+                #                  " " + os.strerror(e.errno))
                 err = HttpErrors(
                     err_number=500,
                     err_message="something wrong with internet connection")
