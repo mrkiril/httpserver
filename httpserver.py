@@ -181,8 +181,7 @@ class HttpResponse(object):
             dt = datetime.datetime(y + 1, 11, 21, 16, 30)
         else:
             dt = self.cookies_expires
-        cook = ("Set-Cookie: {0}={1};".format(k, v)
-                + "expires=" +
+        cook = ("Set-Cookie: {0}={1};".format(k, v) + "expires=" +
                 str(dt.strftime('%A, %d-%b-%Y %H:%M:%S')) + " GMT; path=/\r\n"
                 )
         return cook
