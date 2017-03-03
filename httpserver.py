@@ -49,7 +49,7 @@ class HttpErrors(Exception):
                       '<h1 name="description"><small>' + self.err_message +
                       '</small></h1>', data)
 
-        return HttpResponse(data,
+        return HttpResponse(data.encode(),
                             status_code=str(self.err_number),
                             headers=self.err_headers,
                             content_type='html')
