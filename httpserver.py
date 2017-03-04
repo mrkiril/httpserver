@@ -197,7 +197,7 @@ class HttpResponse(object):
                 for k, v in self.headers.items():
                     q += str(k) + ": " + str(v) + CRLF
             q += "Connection: close" + CRLF
-            if self.content is not None:
+            if self.content is not None:                
                 byte_len = str(len(self.content))
                 q += "Content-Length: " + str(byte_len) + CRLF
                 q += "Content-Type: " + \
