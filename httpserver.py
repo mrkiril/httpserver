@@ -177,8 +177,7 @@ class HttpResponse(object):
     def cookie_str_for_headers(self, k, v):
         Y = str(int(datetime.date.today().strftime("%Y")) + 1)
         if self.cookies_expires is None:
-            y = datetime.datetime.utcnow().year
-            dt = datetime.datetime(y + 1, 11, 21, 16, 30)
+            dt = datetime.datetime.utcnow()
         else:
             dt = self.cookies_expires
         cook = ("Set-Cookie: {0}={1};".format(k, v) + "expires=" +
@@ -197,7 +196,7 @@ class HttpResponse(object):
                 for k, v in self.headers.items():
                     q += str(k) + ": " + str(v) + CRLF
             q += "Connection: close" + CRLF
-            if self.content is not None:                
+            if self.content is not None:
                 byte_len = str(len(self.content))
                 q += "Content-Length: " + str(byte_len) + CRLF
                 q += "Content-Type: " + \
@@ -499,7 +498,10 @@ class BaseServer(object):
                         else:
                             http_resp = self.table[it][
                                 "funk"](request=http_req)
-
+                            if http_resp is None:
+                                self.client_sock.close()
+                                self.logger.info("End")
+                                break
                         response = http_resp.resp_constr()
                         self.send_data(response)
                         self.client_sock.close()
