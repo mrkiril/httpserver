@@ -27,7 +27,7 @@ class HttpErrors(Exception):
         self.file_path = os.path.abspath(os.path.dirname(__file__))
 
     def __str__(self):
-        return repr("HTTP ERROR " + self.err_number +
+        return repr("HTTP ERROR " + str(self.err_number) +
                     " - " + HtCode.get_story(str(self.err_number)))
 
     def geterr(self):
@@ -521,19 +521,27 @@ class BaseServer(object):
                 self.client_sock.close()
 
             except socket.error as e:
-                # self.logger.error('Error Socket. ' + str(e.errno) +
-                #                  " " + os.strerror(e.errno))
+                self.logger.error('Error Socket. ' + str(e.errno) +
+                                  " " + os.strerror(e.errno))
                 err = HttpErrors(
                     err_number=500,
                     err_message="something wrong with internet connection")
                 err = err.geterr().resp_constr()
                 self.client_sock.send(err)
                 self.client_sock.close()
-                break
 
             except HttpErrors as e:
                 err = e.geterr().resp_constr()
                 self.logger.info("Http error: " + str(e.err_number))
+                self.client_sock.send(err)
+                self.client_sock.close()
+
+            except Exception as e:
+                self.logger.info(str(e))
+                err = HttpErrors(
+                    err_number=500,
+                    err_message="something wrong with internet connection")
+                err = err.geterr().resp_constr()
                 self.client_sock.send(err)
                 self.client_sock.close()
 
