@@ -106,7 +106,7 @@ class HttpRequest(object):
     """
 
     def __init__(self, COOKIE, scheme, body, path, method, encoding,
-                 content_type, FILES, headers,
+                 content_type, FILES, headers, user_port, user_ip,
                  GET=None, POST=None, text=None):
 
         self.scheme = scheme
@@ -121,6 +121,8 @@ class HttpRequest(object):
         self.GET = GET
         self.POST = POST
         self.text = text
+        self.user_port = user_port
+        self.user_ip = user_ip
 
 
 class HttpResponse(object):
@@ -317,7 +319,7 @@ class BaseServer(object):
 
     def req_line(self):
         req = b""
-        for i in range(10):
+        for i in range(30):
             req += self.recv_data(20)
             fline_pat = re.match(br"^\s*?(\w+) ([^ ]+) ([^ ]+)\r\n", req)
             if fline_pat is not None:
@@ -385,7 +387,6 @@ class BaseServer(object):
                 if "; " not in headers["cookie"]:
                     cook_arr = headers["cookie"].split("=")
                     COOKIE[cook_arr[0]] = cook_arr[1]
-
             http_req = HttpRequest(
                 text=text,
                 GET=get_params,
@@ -398,7 +399,9 @@ class BaseServer(object):
                 encoding=accept_encoding,
                 content_type=content_type,
                 FILES=post_fies,
-                headers=headers)
+                headers=headers,
+                user_ip=self.client_sock.getpeername()[0],
+                user_port=self.client_sock.getpeername()[1])
         else:
             raise HttpErrors(400)
 
